@@ -20,7 +20,7 @@ import tensorflow as tf
 from voc_to_hdf5 import get_ids
 
 sets_from_2007 = [('2007', 'train'), ('2007', 'val')]
-train_set = [('2012', 'train')] # , ('2012', 'val')]
+train_set = [('2012', 'train') , ('2012', 'val')]
 test_set = [('2007', 'test')]
 
 classes = [
@@ -133,12 +133,8 @@ def convert_to_example(image_data, boxes, classes_all, filename, height, width):
         tf.train.Feature(float_list=tf.train.FloatList(value=box_xmax)),
         'encoded':
         tf.train.Feature(bytes_list=tf.train.BytesList(value=encoded_image)),
-        # TODO at work:
-        'image/object/class/text':
-        tf.train.Feature(bytes_list=tf.train.BytesList(value=encoded_image)),
-
-            dataset_util.bytes_list_feature(classes_text),
-        'image/object/class/label': dataset_util.int64_list_feature(classes),
+        'classes':
+        tf.train.Feature(int64_list=tf.train.Int64List(value=classes_all))
     }))
     return example
 
@@ -214,7 +210,7 @@ def _main(args):
     """Locate files for train and test sets and then generate TFRecords."""
     voc_path = args.path_to_voc
     voc_path = os.path.expanduser(voc_path)
-    result_path = os.path.join(voc_path, 'TFRecords')
+    result_path = os.path.join(voc_path, 'tfrecords')
     print('Saving results to {}'.format(result_path))
 
     train_path = os.path.join(result_path, 'train')
