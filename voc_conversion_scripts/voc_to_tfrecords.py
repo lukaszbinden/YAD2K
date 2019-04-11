@@ -10,6 +10,7 @@ https://github.com/tensorflow/models/blob/master/inception/inception/data/build_
 
 import argparse
 import os
+import sys
 import xml.etree.ElementTree as ElementTree
 from datetime import datetime
 
@@ -19,7 +20,7 @@ import tensorflow as tf
 from voc_to_hdf5 import get_ids
 
 sets_from_2007 = [('2007', 'train'), ('2007', 'val')]
-train_set = [('2012', 'train'), ('2012', 'val')]
+train_set = [('2012', 'train')] # , ('2012', 'val')]
 test_set = [('2007', 'test')]
 
 classes = [
@@ -64,6 +65,7 @@ def process_anno(anno_path):
     height = float(size.find('height').text)
     width = float(size.find('width').text)
     boxes = []
+    classes_all = []
     for obj in root.iter('object'):
         difficult = obj.find('difficult').text
         label = obj.find('name').text
@@ -71,6 +73,7 @@ def process_anno(anno_path):
                 difficult) == 1:  # exclude difficult or unlisted classes
             continue
         xml_box = obj.find('bndbox')
+        classes_all.append(classes.index(label))
         bbox = {
             'class': classes.index(label),
             'y_min': float(xml_box.find('ymin').text) / height,
@@ -79,10 +82,10 @@ def process_anno(anno_path):
             'x_max': float(xml_box.find('xmax').text) / width
         }
         boxes.append(bbox)
-    return boxes
+    return boxes, classes_all
 
 
-def convert_to_example(image_data, boxes, filename, height, width):
+def convert_to_example(image_data, boxes, classes_all, filename, height, width):
     """Convert Pascal VOC ground truth to TFExample protobuf.
 
     Parameters
@@ -129,7 +132,13 @@ def convert_to_example(image_data, boxes, filename, height, width):
         'x_maxes':
         tf.train.Feature(float_list=tf.train.FloatList(value=box_xmax)),
         'encoded':
-        tf.train.Feature(bytes_list=tf.train.BytesList(value=encoded_image))
+        tf.train.Feature(bytes_list=tf.train.BytesList(value=encoded_image)),
+        # TODO at work:
+        'image/object/class/text':
+        tf.train.Feature(bytes_list=tf.train.BytesList(value=encoded_image)),
+
+            dataset_util.bytes_list_feature(classes_text),
+        'image/object/class/label': dataset_util.int64_list_feature(classes),
     }))
     return example
 
@@ -178,10 +187,10 @@ def process_dataset(name, image_paths, anno_paths, result_path, num_shards):
 
             # processes image + anno
             image_data, height, width = process_image(image_file)
-            boxes = process_anno(anno_file)
+            boxes, classes_all = process_anno(anno_file)
 
             # convert to example
-            example = convert_to_example(image_data, boxes, image_file, height,
+            example = convert_to_example(image_data, boxes, classes_all, image_file, height,
                                          width)
 
             # write to writer
@@ -209,36 +218,36 @@ def _main(args):
     print('Saving results to {}'.format(result_path))
 
     train_path = os.path.join(result_path, 'train')
-    test_path = os.path.join(result_path, 'test')
+    # test_path = os.path.join(result_path, 'test')
 
-    train_ids = get_ids(voc_path, train_set)  # 2012 trainval
-    test_ids = get_ids(voc_path, test_set)  # 2007 test
-    train_ids_2007 = get_ids(voc_path, sets_from_2007)  # 2007 trainval
-    total_train_ids = len(train_ids) + len(train_ids_2007)
-    print('{} train examples and {} test examples'.format(total_train_ids,
-                                                          len(test_ids)))
+    train_ids = get_ids(voc_path, train_set)  # 2012 train
+    # test_ids = get_ids(voc_path, test_set)  # 2007 test
+    # train_ids_2007 = get_ids(voc_path, sets_from_2007)  # 2007 trainval
+    total_train_ids = len(train_ids)  # + len(train_ids_2007)
+    print('{} train examples '.format(total_train_ids))
 
     train_image_paths = [
         get_image_path(voc_path, '2012', i) for i in train_ids
     ]
-    train_image_paths.extend(
-        [get_image_path(voc_path, '2007', i) for i in train_ids_2007])
-    test_image_paths = [get_image_path(voc_path, '2007', i) for i in test_ids]
+    # train_image_paths.extend(
+    #     [get_image_path(voc_path, '2007', i) for i in train_ids_2007])
+    # test_image_paths = [get_image_path(voc_path, '2007', i) for i in test_ids]
 
     train_anno_paths = [get_anno_path(voc_path, '2012', i) for i in train_ids]
-    train_anno_paths.extend(
-        [get_anno_path(voc_path, '2007', i) for i in train_ids_2007])
-    test_anno_paths = [get_anno_path(voc_path, '2007', i) for i in test_ids]
+    # train_anno_paths.extend(
+    #     [get_anno_path(voc_path, '2007', i) for i in train_ids_2007])
+    # test_anno_paths = [get_anno_path(voc_path, '2007', i) for i in test_ids]
 
     process_dataset(
         'train',
         train_image_paths,
         train_anno_paths,
         train_path,
-        num_shards=60)
-    process_dataset(
-        'test', test_image_paths, test_anno_paths, test_path, num_shards=20)
+        num_shards=1)
+    # process_dataset(
+    #     'test', test_image_paths, test_anno_paths, test_path, num_shards=20)
 
 
 if __name__ == '__main__':
+    args = sys.argv[1:]
     _main(parser.parse_args(args))
