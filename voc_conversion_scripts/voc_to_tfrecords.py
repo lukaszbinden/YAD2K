@@ -19,6 +19,8 @@ import tensorflow as tf
 
 from voc_to_hdf5 import get_ids
 
+MAX_IMAGES = None # 100
+
 sets_from_2007 = [('2007', 'train'), ('2007', 'val')]
 train_set = [('2012', 'train') , ('2012', 'val')]
 test_set = [('2007', 'test')]
@@ -35,7 +37,7 @@ parser.add_argument(
     '-p',
     '--path_to_voc',
     help='path to Pascal VOC dataset',
-    default='~/data/PascalVOC/VOCdevkit')
+    default='/home/lz01a008/git/yad2k/YAD2K/voc_conversion_scripts/VOCdevkit')
 
 # Small graph for image decoding
 decoder_sess = tf.Session()
@@ -65,7 +67,7 @@ def process_anno(anno_path):
     height = float(size.find('height').text)
     width = float(size.find('width').text)
     boxes = []
-    classes_all = []
+    classes_all = np.zeros(len(classes), dtype=int)
     for obj in root.iter('object'):
         difficult = obj.find('difficult').text
         label = obj.find('name').text
@@ -73,7 +75,7 @@ def process_anno(anno_path):
                 difficult) == 1:  # exclude difficult or unlisted classes
             continue
         xml_box = obj.find('bndbox')
-        classes_all.append(classes.index(label))
+        classes_all[classes.index(label) - 1] = 1
         bbox = {
             'class': classes.index(label),
             'y_min': float(xml_box.find('ymin').text) / height,
@@ -194,6 +196,10 @@ def process_dataset(name, image_paths, anno_paths, result_path, num_shards):
 
             shard_counter += 1
             counter += 1
+
+            if MAX_IMAGES and counter >= MAX_IMAGES:
+                print("%d images created >= MAX_IMAGES: %d, terminate..." % (counter, MAX_IMAGES))
+                break
 
             if not counter % 1000:
                 print('{} : Processed {:d} of {:d} images.'.format(
